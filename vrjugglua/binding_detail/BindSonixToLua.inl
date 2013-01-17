@@ -24,7 +24,7 @@
 
 // Library/third-party includes
 #include <luabind/luabind.hpp>
-
+#include <osg/Vec4>
 #include <snx/SoundHandle.h>
 
 // Standard includes
@@ -32,6 +32,22 @@
 #include <iostream>
 #endif
 
+namespace{
+	 osg::Vec3f scalingGetPosition(snx::SoundHandle &h){
+		const double feetToMeters = 0.3048;
+		float x, y, z;
+		snx::SoundHandle &hbetter = const_cast<snx::SoundHandle&>(h);
+		hbetter.getPosition(x,y,z);
+		return  osg::Vec3f(x,y,z)*feetToMeters;
+	}
+	void scalingSetPosition(snx::SoundHandle &h, osg::Vec3 &vec){
+		const double metersToFeet = 3.28084;
+		osg::Vec3f scaledVec = vec*metersToFeet;
+		snx::SoundHandle &hbetter = const_cast<snx::SoundHandle&>(h);
+		hbetter.setPosition(scaledVec.x(),scaledVec.y(),scaledVec.z());
+		return;
+	}
+}
 namespace vrjLua {
 	using namespace luabind;
 
@@ -71,9 +87,11 @@ namespace vrjLua {
 		    .property("isPaused", &snx::SoundHandle::isPaused)
 		    .property("ambient", &snx::SoundHandle::isAmbient, &snx::SoundHandle::setAmbient)
 		    .property("retriggerable", &snx::SoundHandle::isRetriggerable, &snx::SoundHandle::setRetriggerable)
-		    .def("setPosition", &snx::SoundHandle::setPosition)
+		    //.def("setPosition", &scalingSetPosition)
+			.def("getPosition", &scalingGetPosition)
+			.def("setPitchBend", &snx::SoundHandle::setPitchBend)
+			.def("setVolume", &snx::SoundHandle::setVolume)
+			.def("setCutoff", &snx::SoundHandle::setCutoff)
 		];
-
 	}
-
 }// end of vrjLua namespace
