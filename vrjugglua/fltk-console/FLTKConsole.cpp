@@ -26,8 +26,6 @@
 #include <vrjlua-fltk-console.h>
 
 // Library/third-party includes
-#include <boost/scoped_ptr.hpp>
-
 #include <FL/Fl_Text_Buffer.H>
 #include <FL/Fl_Native_File_Chooser.H>
 
@@ -42,47 +40,27 @@
 
 namespace vrjLua {
 
-	void doNothingUponModify(int, int, int, int, const char *, void *) {
-		// Do nothing
-		// FLTK whines at shutdown if there's no modify callback for its text buffers
-	}
-
-	void doNothingUponPreDelete(int, int, void*) {
-		// Do nothing
-		// FLTK whines at shutdown if there's no predelete callback for its text buffers
-	}
-
-
 	class FLTKConsoleView : public FLTKConsoleUI {
 		public:
 			FLTKConsoleView(FLTKConsole* console) :
 				_console(console),
-				FLTKConsoleUI(700, 590, "VRJLua Console"),
-				_inputBuf(new Fl_Text_Buffer()),
-				_codeBuf(new Fl_Text_Buffer()) {
-				_input->buffer(_inputBuf.get());
-				_existingCode->buffer(_codeBuf.get());
-
-				_inputBuf->add_modify_callback(doNothingUponModify, NULL);
-				_codeBuf->add_modify_callback(doNothingUponModify, NULL);
-
-				_inputBuf->add_predelete_callback(doNothingUponPreDelete, NULL);
-				_codeBuf->add_predelete_callback(doNothingUponPreDelete, NULL);
-
+				FLTKConsoleUI(700, 590, "VRJLua Console") {
+				_input->buffer(new Fl_Text_Buffer());
+				_existingCode->buffer(new Fl_Text_Buffer());
 				show();
 			}
 
 			virtual void runInput() {
 				std::string input;
 				{
-					char * input_chars = _inputBuf->text();
+					char * input_chars = _input->buffer()->text();
 					input = std::string(input_chars);
 					free(input_chars);
 				}
 
 				bool ret = _console->addString(input);
 				if (ret) {
-					_inputBuf->text("");
+					_input->buffer()->text("");
 				}
 			}
 
@@ -113,7 +91,7 @@ namespace vrjLua {
 					return;
 				}
 
-				int saveret = _codeBuf->savefile(fc.filename());
+				int saveret = _existingCode->buffer()->savefile(fc.filename());
 				if (saveret == 0) {
 					// Successful - append to the text display
 					std::string code("-- code up to here saved to file '");
@@ -126,16 +104,14 @@ namespace vrjLua {
 			}
 
 			virtual void appendToDisplay(std::string const& message) {
-				_codeBuf->append(message.c_str());
-				_codeBuf->append("\n");
+				_existingCode->buffer()->append(message.c_str());
+				_existingCode->buffer()->append("\n");
 				// Scroll to bottom
-				_existingCode->scroll(_existingCode->count_lines(0, _codeBuf->length(), 1), 0);
+				_existingCode->scroll(_existingCode->count_lines(0, _existingCode->buffer()->length(), 1), 0);
 			}
 
 		protected:
 			FLTKConsole * _console;
-			boost::scoped_ptr<Fl_Text_Buffer> _inputBuf;
-			boost::scoped_ptr<Fl_Text_Buffer> _codeBuf;
 	};
 
 	void FLTKConsole::setup(int & argc, char * argv[]) {
@@ -144,55 +120,45 @@ namespace vrjLua {
 	}
 
 	FLTKConsole::FLTKConsole() :
-		LuaConsole(),
-		_running(false) {
-#ifdef VERBOSE
-		std::cout << "In constructor " << __FUNCTION__ << " at " << __FILE__ << ":" << __LINE__ << " with this=" << this << std::endl;
-#endif
-		_view = boost::shared_ptr<FLTKConsoleView>(new FLTKConsoleView(this));
+		LuaConsole() {
+		_view.reset(new FLTKConsoleView(this));
 	}
 
 	FLTKConsole::FLTKConsole(LuaScript const& script) :
-		LuaConsole(script),
-		_running(false) {
-#ifdef VERBOSE
-		std::cout << "In constructor " << __FUNCTION__ << " at " << __FILE__ << ":" << __LINE__ << " with this=" << this << std::endl;
-#endif
-		_view = boost::shared_ptr<FLTKConsoleView>(new FLTKConsoleView(this));
+		LuaConsole(script) {
+		_view.reset(new FLTKConsoleView(this));
 	}
 
 	FLTKConsole::~FLTKConsole() {
-#ifdef VERBOSE
-		std::cout << "In destructor " << __FUNCTION__ << " at " << __FILE__ << ":" << __LINE__ << " with this=" << this << std::endl;
-#endif
-		stopThread();
+	}
+
+	namespace {
+		void reportRunning(void * data) {
+			RunLoopManager & run_ = *static_cast<RunLoopManager*>(data);
+			run_.reportRunning();
+		}
 	}
 
 	bool FLTKConsole::threadLoop() {
-		if (_running) {
-			/// @todo notify that the thread is already running?
-			return false;
-		}
-
-		_running = true;
-		bool ret = true;
-		_consoleIsReady();
-		while (_running && vrj::Kernel::instance()->isRunning()) {
-			// Do the FLTK loop
-			ret = _doThreadWork();
-			if (!ret) {
-				// Exit originating from FLTK
-				break;
+		{
+			LoopGuard guard(run_, LoopGuard::DELAY_REPORTING_START);
+			Fl::add_timeout(0, &reportRunning, static_cast<void*>(&run_));
+			while (run_.shouldContinue() && vrj::Kernel::instance()->isRunning()) {
+				// Do the FLTK loop
+				bool ret = _doThreadWork();
+				if (!ret) {
+					// Exit originating from FLTK
+					break;
+				}
 			}
 		}
-		_running = false;
 		vrj::Kernel::instance()->stop();
 		vrj::Kernel::instance()->waitForKernelStop();
 		return true;
 	}
 
 	void FLTKConsole::stopThread() {
-		_running = false;
+		run_.signalAndWaitForShutdown();
 	}
 
 	void FLTKConsole::appendToDisplay(std::string const& message) {

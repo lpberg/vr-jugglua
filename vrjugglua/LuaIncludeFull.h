@@ -21,14 +21,11 @@
 #ifndef INCLUDED_vrjugglua_LuaIncludeFull_h
 #define INCLUDED_vrjugglua_LuaIncludeFull_h
 
-#include <vrjugglua/LuaInclude.h>
-
-LUA_C_INTERFACE_BEGIN
+#include "LuaCInterfaceBegin.h"
 
 #include <lauxlib.h>
 #include <lualib.h>
 
-LUA_C_INTERFACE_END
-
+#include "LuaCInterfaceEnd.h"
 
 #endif // INCLUDED_vrjugglua_LuaIncludeFull_h

@@ -33,49 +33,7 @@
 
 namespace vrjLua {
 	class SynchronizedRunBuffer;
-	class LuaConsole;
 
-	namespace detail {
-		class LuaConsoleInitialOutputProxy;
-		class LuaConsoleOutputProxy {
-			public:
-				template<typename T>
-				std::ostream & operator<<(T const& val) {
-					_stream << val;
-					return _stream;
-				}
-
-				~LuaConsoleOutputProxy();
-			private:
-				friend class LuaConsoleInitialOutputProxy;
-				template<typename T>
-				LuaConsoleOutputProxy(LuaConsole * console, T const& val)
-					: _console(console)
-				{
-					_stream << val;
-				}
-
-				LuaConsole * _console;
-				std::ostringstream _stream;
-		};
-
-		class LuaConsoleInitialOutputProxy {
-			public:
-				template<typename T>
-				std::ostream & operator<<(T const& val) {
-					return LuaConsoleOutputProxy(_console, val);
-				}
-
-
-			private:
-				friend class ::vrjLua::LuaConsole;
-				LuaConsoleInitialOutputProxy(LuaConsole * console)
-					: _console(console)
-					{}
-				LuaConsole * _console;
-
-		};
-	} // end of namespace detail
 	class LuaConsole {
 		public:
 			LuaConsole();
@@ -89,27 +47,21 @@ namespace vrjLua {
 			void captureStdOut();
 			void captureStdErr();
 
-			/** @brief This function is used for a "cout"-style way of
-				putting text in the console.
-
-				Use like this:
-				console->appendToDisplay() << "This is some text " << 5;
-			*/
-			detail::LuaConsoleInitialOutputProxy appendToDisplay() {
-				return detail::LuaConsoleInitialOutputProxy(this);
-			}
-
-
 			/// @name Implementation interface
 			/// @{
+			/// @brief Enter the thread loop for the GUI, don't return till we exit.
 			virtual bool threadLoop() = 0;
 
+			/// @brief Signal for the thread loop to exit.
 			virtual void stopThread() = 0;
 
+			/// @brief Display the given string in the console output.
 			virtual void appendToDisplay(std::string const& message) = 0;
 
+			/// @brief Set the title of the GUI console, for advanced applications
 			virtual void setTitle(std::string const& title) = 0;
 
+			/// @brief Disable controls in GUI (for secondary cluster nodes, for instance)
 			virtual void disableAction() = 0;
 			/// @}
 
@@ -146,6 +98,7 @@ namespace vrjLua {
 			boost::shared_ptr<SynchronizedRunBuffer> _runbuf;
 	};
 
+	/// @brief A text-only "stub" console that doesn't actually provide a REPL.
 	class StubConsole : public LuaConsole {
 		public:
 			StubConsole();

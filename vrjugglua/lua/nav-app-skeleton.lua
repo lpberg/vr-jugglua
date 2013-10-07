@@ -2,13 +2,16 @@ print("nav-app-skeleton starting up...")
 
 require("Navigator")
 require("Scene")
+require("Actions")
 
 RelativeTo = {
 	Room = osg.Group(),
-	World = osg.Group()
+	World = osg.MatrixTransform()
 }
 
 osgnav = {position = osg.Vec3d(0, 0, 0)}
+
+GlobalStateSet = nil
 
 local setUpActions = false
 
@@ -26,15 +29,16 @@ function osgnav:initScene()
 	self.nav = Navigator.create(maxspeed)
 	Navigator.useWandTranslation(self.nav, wand, button)
 
+	local scene = self.appProxy:getScene()
 	--print("Setting up scenegraph")
-	navtransform = osg.PositionAttitudeTransform()
-	navtransform:addChild(RelativeTo.World)
-	
+	scene:addChild(RelativeTo.World)
+
 
 	--print("Attaching to app proxy's scene")
-	self.appProxy:getScene():addChild(navtransform)
-	self.appProxy:getScene():addChild(RelativeTo.Room)
-	
+	scene:addChild(RelativeTo.Room)
+
+	GlobalStateSet = scene:getOrCreateStateSet()
+
 	print("Scenegraph Navigation Testbed loaded!")
 	print("")
 	print("RelativeTo.World is your root-level group node for the world you can navigate.")
@@ -56,8 +60,6 @@ function osgnav:initScene()
 end
 
 function osgnav:preFrame()
-	self.position = self.position - self.nav:getTranslation(self.appProxy:getTimeDelta(), self.position)
-	navtransform:setPosition(self.position)
 end
 
 function osgnav:latePreFrame()
@@ -87,6 +89,20 @@ print("Setting kernel application")
 osgnav.appProxy:setActiveApplication()
 
 
+do
+	local self = osgnav
+	self.standardNavAction = Actions.addFrameAction(
+		function(dt)
+			local dt = dt
+			while true do
+				self.position = self.position - self.nav:getTranslation(dt, self.position)
+				RelativeTo.World:setMatrix(osg.Matrix.translate(self.position))
+				dt = Actions.waitForRedraw()
+			end
+		end
+	)
+end
 
-
-
+osgnav.removeStandardNavigation = function()
+	Actions.removeFrameAction(osgnav.standardNavAction)
+end

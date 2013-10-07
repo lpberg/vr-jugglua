@@ -27,6 +27,20 @@ if(APPLE AND CMAKE_SIZEOF_VOID_P EQUAL 8)
 	set(HIDE_FLTK TRUE)
 endif()
 
+# Set up build directories
+if(NOT CMAKE_ARCHIVE_OUTPUT_DIRECTORY)
+	set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+endif()
+if(NOT CMAKE_LIBRARY_OUTPUT_DIRECTORY)
+	set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+endif()
+if(NOT CMAKE_RUNTIME_OUTPUT_DIRECTORY)
+	set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+endif()
+if(NOT SHARE_OUTPUT_DIRECTORY)
+	set(SHARE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/share)
+endif()
+
 # Define Simple Options
 option(BUILD_DOCS "Add a target to build documentation" on)
 option(BUILD_VERBOSE "Turn on lots of runtime output." off)
@@ -40,26 +54,37 @@ option(INSTALL_CXX_SDK "Should we install the headers and libraries needed for C
 
 if(WIN32 OR APPLE)
 	set(SNAPSHOT_ROOT_README_DEFAULT on)
+	set(BUNDLE_DEFAULT on)
+	set(BUILD_WITHOUT_TERMINAL_DEFAULT ON)
 else()
 	set(SNAPSHOT_ROOT_README_DEFAULT off)
+	set(BUNDLE_DEFAULT off)
+	set(BUILD_WITHOUT_TERMINAL_DEFAULT OFF)
 endif()
+
 option(INSTALL_SNAPSHOT_README_TO_ROOT "Should we install the binary snapshot readme to the root install directory?" ${SNAPSHOT_ROOT_README_DEFAULT})
 
-option(BUILD_WITHOUT_TERMINAL "Build GUI applications without the terminal when possible." on)
+option(BUILD_WITHOUT_TERMINAL "Build GUI applications without the terminal when possible." ${BUILD_WITHOUT_TERMINAL_DEFAULT})
 
 option(BUILD_WITH_CPPINTROSPECTION "Build against cppintrospection instead of osgIntrospection." off)
+
+option(INSTALL_LIBRARIES_BUNDLE "Use BundleUtils to install dependent libraries, etc." ${BUNDLE_DEFAULT})
 
 # Define advanced options
 option(BUILD_EMBEDDED_LUA "Build Lua, LuaBind, and osgLua as a part of the app - highly recommended." ON)
 option(BUILD_LUA_UTILS "Build a stock, standalone lua-interpreter and luac" ON)
 option(BUILD_SHARED_OSGLUA "Whether to also build a DLL/.so version of osgLua." OFF)
-option(BUILD_LUA_AS_CPP "Build Lua as C++, rather than C - recommended." ON)
+option(BUILD_SHARED_LUA "Whether to build Lua as a shared library." OFF)
+option(BUILD_SHARED_LUABIND "Whether to build LuaBind as a shared library." OFF)
+option(BUILD_LUA_AS_CPP "Build Lua as C++, rather than C - recommended." OFF)
 option(BUILD_VERY_VERBOSE "Turn on excessive amounts of runtime output." OFF)
 
 # Mark some as advanced
 mark_as_advanced(BUILD_EMBEDDED_LUA
 	BUILD_LUA_UTILS
 	BUILD_SHARED_OSGLUA
+	BUILD_SHARED_LUA
+	BUILD_SHARED_LUABIND
 	BUILD_LUA_AS_CPP
 	BUILD_VERY_VERBOSE)
 
@@ -141,6 +166,13 @@ endif()
 include(SearchProgramFilesForOpenSceneGraph)
 find_package(OpenSceneGraph REQUIRED COMPONENTS osgDB osgUtil ${OSGINTROSPECTION_COMPONENT})
 
+if(APPLE)
+	# TODO: Make this workaround prettier or, better, fix the libgif issue
+	# Someone is using the old libgif in ImageIO.framework
+	# Therefore we need to add its path to the runtime library dirs
+	list(APPEND RUNTIME_LIBRARY_DIRS "/System/Library/Frameworks/ApplicationServices.framework/Versions/A/Frameworks/ImageIO.framework/Versions/A/Resources")
+endif()
+
 get_directory_list(OPENSCENEGRAPH_RUNTIME_LIBRARY_DIRS ${OPENSCENEGRAPH_LIBRARIES})
 list(APPEND RUNTIME_LIBRARY_DIRS ${OPENSCENEGRAPH_RUNTIME_LIBRARY_DIRS})
 if(WIN32)
@@ -174,9 +206,12 @@ if(BUILD_EMBEDDED_LUA)
 	set(LUABIND_DEFINITIONS -DLUABIND_MAX_BASES=3 -DLUABIND_MAX_ARITY=3)
 	set(LUABIND_INCLUDE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/third-party/luabind")
 	set(LUABIND_LIBRARIES luabind)
+	if(BUILD_SHARED_LUABIND)
+		list(APPEND LUABIND_DEFINITIONS "-DLUABIND_DYNAMIC_LINK")
+	endif()
 
 	set(OSGLUA_INCLUDE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/third-party/osgLua")
-	set(OSGLUA_LIBRARIES osgLua_static)
+	set(OSGLUA_LIBRARIES osgLua)
 else()
 	find_package(Luabind REQUIRED)
 
@@ -202,6 +237,19 @@ if(BUILD_QT_GUI)
 	endif()
 endif()
 
+if(NOT (WIN32 OR APPLE))
+	find_library(READLINE_LIBRARY
+		NAMES
+		readline)
+	find_package(Curses)
+	if(READLINE_LIBRARY AND CURSES_FOUND)
+		set(LUA_USE_LINUX 1)
+	else()
+		set(LUA_USE_POSIX 1)
+		set(LUA_USE_DLOPEN 1)
+	endif()
+endif()
+
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/vrjugglua/VRJLuaConfig.h.in"
 	"${CMAKE_CURRENT_BINARY_DIR}/vrjugglua/VRJLuaConfig.h")
 
@@ -214,7 +262,7 @@ if(WIN32)
 endif()
 find_package(Markdown)
 if(MARKDOWN_FOUND)
-	include(MarkdownTargets)
+	include(UseMarkdown)
 endif()
 
 ###
@@ -225,7 +273,7 @@ endif()
 add_subdirectory(third-party)
 
 if(BUILD_EMBEDDED_LUA)
-	list(APPEND EXTRA_LIBS luabind osgLua_static)
+	list(APPEND EXTRA_LIBS ${LUABIND_LIBRARIES} ${OSGLUA_LIBRARIES})
 endif()
 
 if(BUILD_FLTK_GUI)
@@ -284,7 +332,7 @@ create_dashboard_scripts("DashboardBuildInitialCache.cmake.in")
 ###
 
 # Set up use from build tree
-set(BUILD_TREE_TARGETS lua osgLua_static luabind vrjugglua)
+set(BUILD_TREE_TARGETS lua osgLua luabind vrjugglua)
 if(BUILD_FLTK_GUI)
 	list(APPEND BUILD_TREE_TARGETS Fl_Native_File_Chooser vrjugglua-fltk)
 endif()

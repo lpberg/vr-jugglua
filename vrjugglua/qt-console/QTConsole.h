@@ -23,16 +23,24 @@
 
 #define QT_NO_KEYWORDS
 
+#ifndef QT_MOC_RUN
+// See https://bugreports.qt-project.org/browse/QTBUG-22829
+
 // Local includes
 #include <vrjugglua/LuaConsole.h>
 #include <vrjugglua/LuaScript.h>
 
+#include <vrjugglua/RunLoopManager.h>
+
 // Library/third-party includes
 #include <boost/noncopyable.hpp>
-#include <boost/shared_ptr.hpp>
+
+#endif
 
 #include <QMainWindow>
 #include <QApplication>
+#include <QUrl>
+#include <QScopedPointer>
 
 // Standard includes
 #include <string>
@@ -42,7 +50,7 @@ namespace Ui {
 }
 
 namespace vrjLua {
-
+	class LuaConsole;
 
 	class QTConsole : public QMainWindow, boost::noncopyable, public LuaConsole {
 
@@ -87,6 +95,7 @@ namespace vrjLua {
 
 			void on_actionFileOpen_triggered();
 			void on_actionFileSave_triggered();
+			void on_actionLoadAddlJconf_triggered();
 			void on_actionFileExit_triggered();
 			void on_buttonRun_clicked();
 
@@ -96,13 +105,16 @@ namespace vrjLua {
 			void disableGUIAction();
 			void consoleReady();
 
+			void loadJconf(QUrl url);
+			void runLuaFile(QUrl url);
+
 		protected:
 			void _shared_init();
 			QApplication * _app;
-			bool _running;
+			RunLoopManager run_;
 
 			static QApplication * s_app;
-			boost::shared_ptr<Ui::MainWindow> _ui;
+			QScopedPointer<Ui::MainWindow> _ui;
 
 	};
 

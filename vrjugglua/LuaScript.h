@@ -22,31 +22,32 @@
 #define INCLUDED_vrjugglua_LuaScript_h
 
 // Local includes
-#include <vrjugglua/LuaInclude.h>
+#include <vrjugglua/LuaStateFwd.h>
 
 // Library/third-party includes
 #include <boost/shared_ptr.hpp>
-#include <boost/weak_ptr.hpp>
-#include <boost/program_options/options_description.hpp>
-#include <boost/program_options/variables_map.hpp>
+#include <boost/function.hpp>
 
 // Standard includes
 #include <string>
 #include <stdexcept>
+#include <functional> // for std::ptr_fun
 
 namespace vrjLua {
-
+	/// @brief no-op deleter for externally-provided state pointers
 	inline void state_no_op_deleter(lua_State * /*L*/) {
 		return;
 	}
 
-	typedef lua_State * LuaStateRawPtr;
 	typedef boost::shared_ptr<lua_State> LuaStatePtr;
-	typedef boost::weak_ptr<lua_State> LuaStateWeakPtr;
 
-	inline LuaStatePtr borrowStatePtr(LuaStateRawPtr ptr) {
+	inline LuaStatePtr borrowStatePtr(lua_State * ptr) {
 		return LuaStatePtr(ptr, std::ptr_fun(state_no_op_deleter));
 	}
+
+	struct CouldNotOpenState : public std::runtime_error {
+		CouldNotOpenState() : std::runtime_error("Could not open a new Lua state.") {}
+	};
 
 	struct NoValidLuaState : public std::logic_error {
 		NoValidLuaState() : std::logic_error("Attempted to perform a LuaScript manipulation on a LuaScript instance without a valid state pointer!") {}
@@ -60,10 +61,10 @@ namespace vrjLua {
 			/// @brief constructor from an externally-allocated state
 			LuaScript(lua_State * state, bool bind = false);
 
-			/// @brief copy constructor - doesn't re-bind
+			/// @brief copy constructor - doesn't re-bind. Will not copy from an empty pointer.
 			LuaScript(const LuaScript & other);
 
-			/// @brief copy constructor - doesn't re-bind
+			/// @brief copy constructor - doesn't re-bind. Will not copy from an empty pointer.
 			LuaScript(const LuaStatePtr & other);
 
 			~LuaScript();
@@ -78,20 +79,15 @@ namespace vrjLua {
 			void setPrintFunction(boost::function<void (std::string const&)> func);
 			static void doPrint(std::string const& str);
 
-			LuaStateWeakPtr getLuaState() const;
-			LuaStateRawPtr getLuaRawState() const;
+			/// Gets a shared pointer to the Lua state, guaranteed to be non-null.
+			LuaStatePtr const & getLuaState() const;
+
+			/// Gets a raw pointer to the Lua state, guaranteed to be non-null
+			lua_State * getLuaRawState() const;
 
 			bool isValid() const;
 
 			static bool exitOnError;
-
-			static boost::program_options::options_description getVrjOptionsDescriptions();
-			static void initVrjKernel(boost::program_options::variables_map const& vm);
-			static void initVrjKernel(int argc, char* argv[]);
-
-			static void initVrjKernelAsSingleMachine();
-			static void initVrjKernelAsClusterPrimary();
-			static void initVrjKernelAsClusterSecondary(int port = 0);
 
 		protected:
 			static boost::function<void (std::string const&)> _printFunc;

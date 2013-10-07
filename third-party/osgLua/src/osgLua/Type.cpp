@@ -14,6 +14,8 @@
     OpenSceneGraph Public License for more details.
 */
 
+
+#include "InternalConfig.h"
 #include "Type.h"
 
 #include <osgLua/Value>                 // for getValue, Value
@@ -57,8 +59,7 @@ namespace osgLua {
 		const char *tname  = lua_tostring(L, lua_upvalueindex(1));
 		const char *method = lua_tostring(L, lua_upvalueindex(2));
 		try {
-			const introspection::Type &type =
-			    introspection::Reflection::getType(tname);
+			const introspection::Type &type = lookupType(tname);
 
 			introspection::ValueList vl;
 			for (int i = 1; i <= top; ++i) {

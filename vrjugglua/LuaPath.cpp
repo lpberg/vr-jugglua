@@ -30,7 +30,6 @@
 #include <boost/algorithm/string/trim.hpp>
 
 #include <vpr/System.h>
-#include <vpr/vprDefines.h>             // for VPR_OS_Linux
 #include <vrj/vrjParam.h> // for __VJ_version define
 
 // Standard includes
@@ -39,24 +38,6 @@
 
 namespace fs = boost::filesystem;
 
-#ifdef VPR_OS_Linux
-
-#include <link.h>
-
-extern "C" {
-	int sharedObjectCallback(struct dl_phdr_info *info,
-	                         size_t, void *data);
-}
-
-int sharedObjectCallback(struct dl_phdr_info *info, size_t, void *data) {
-	std::string fn(info->dlpi_name);
-	if (fn.find("vpr") != std::string::npos) {
-		(*static_cast<std::string*>(data)) = fn;
-	}
-	return 0;
-}
-
-#endif // VPR_OS_Linux
 
 namespace vrjLua {
 
@@ -141,8 +122,15 @@ namespace vrjLua {
 		_initialPath = fs::initial_path().string();
 		std::vector<std::string> startingPlaces;
 		startingPlaces.push_back(_initialPath);
+#if BOOST_FILESYSTEM_VERSION == 3
+		startingPlaces.push_back(fs::absolute(vrjlua_base).string());
+#else
 		startingPlaces.push_back(fs::complete(vrjlua_base).string());
-#ifdef BOOST_FILESYSTEM_NO_DEPRECATED
+#endif
+#if BOOST_FILESYSTEM_VERSION == 3
+		_exeDir = fs::absolute(arg0).remove_leaf().string();
+		startingPlaces.push_back(fs::absolute(arg0).remove_leaf().string());
+#elif defined(BOOST_FILESYSTEM_NO_DEPRECATED)
 		_exeDir = fs::complete(arg0).remove_filename().string();
 		startingPlaces.push_back(fs::complete(arg0).remove_filename().string());
 #else
@@ -194,7 +182,9 @@ namespace vrjLua {
 		std::string vprLibraryPath = findVPRDLL();
 		if (!vprLibraryPath.empty()) {
 			try {
-#ifdef BOOST_FILESYSTEM_NO_DEPRECATED
+#if BOOST_FILESYSTEM_VERSION == 3
+				return _findFilePath(fs::absolute(vprLibraryPath).remove_leaf().string(), jugglerTest.string());
+#elif defined(BOOST_FILESYSTEM_NO_DEPRECATED)
 				return _findFilePath(fs::complete(vprLibraryPath).remove_filename().string(), jugglerTest.string());
 #else
 				return _findFilePath(fs::complete(vprLibraryPath).remove_leaf().string(), jugglerTest.string());
@@ -238,26 +228,8 @@ namespace vrjLua {
 	std::string const& LuaPath::getInitialPath() const {
 		return _initialPath;
 	}
-
-	std::string LuaPath::getPathToLuaScript(const std::string & scriptfn) const {
-		return (fs::path(_luaDir) / scriptfn).string();
-	}
-
-	void LuaPath::chdir(std::string const& path) {
-		fs::current_path(path);
-	}
-
-	void LuaPath::addLuaRequirePath(LuaStatePtr state, std::string const& dirEndingInSlash) {
-		_searchPaths.push_front(dirEndingInSlash + "?.lua");
-		_searchPaths.push_front(dirEndingInSlash + "?");
-		updateLuaRequirePath(state);
-	}
-
-	void LuaPath::updateLuaRequirePath(LuaStatePtr state) {
-		if (_searchPaths.empty()) {
-			_populateSearchPathsVector(state);
-		}
-		_setLuaSearchPaths(state);
+	std::string const& LuaPath::getLuaDir() const {
+		return _luaDir;
 	}
 
 	bool LuaPath::_setJugglerEnvironment() const {
